@@ -1,0 +1,7 @@
+path: ./VisualAssistance/model_training/training_dataset #absolute path to dataset
+train: ./VisualAssistance/model_training/training_dataset/train/images
+val: ./VisualAssistance/model_training/training_dataset/valid/images
+
+#Classes
+names:
+  0: crosswalk
