@@ -1,6 +1,5 @@
-// Imports needed for this file
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom'; // Import routing components
+import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
 import './App.css';
 import logo from './public/safewalk.png';
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,28 +18,26 @@ function HomePage() {
         <h1>Safe Step</h1>
         <Link to="/main" className="HomePage-button">Tap to Start</Link>
       </header>
-      </motion.div>
+    </motion.div>
   );
 }
 
 function MainPage() {
   const videoRef = useRef(null);
   const [crosswalkDetected, setCrosswalkDetected] = useState(false);
-  const [confidence, setConfidence] = useState(0);
-  const [lastAnnouncement, setLastAnnouncement] = useState(false);
-  const [showMessage, setShowMessage] = useState(false); // New state to control message visibility
-  const crosswalkMessage = "Crosswalk detected, it is safe to cross.";
+  const [crosswalkConfidence, setCrosswalkConfidence] = useState(0);
+  const [pedestrianDetected, setPedestrianDetected] = useState(false);
+  const [pedestrianConfidence, setPedestrianConfidence] = useState(0);
+  const [announcementMade, setAnnouncementMade] = useState(false);
 
-  // Function to announce the crosswalk detection status using Web Speech API
-  const announceCrosswalk = (message) => {
+  const announceMessage = (message) => {
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.pitch = 0.75;
     utterance.rate = 0.9;
-    utterance.volume = 2;
+    utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
   };
 
-  // useEffect hook to access the user's camera feed on component mount
   useEffect(() => {
     const getVideo = async () => {
       try {
@@ -52,50 +49,54 @@ function MainPage() {
         console.error('Error accessing camera: ', err);
       }
     };
-    // Calls function to get the video stream
     getVideo();
   }, []);
 
-  // Function to fetch crosswalk detection data from the backend API
-  const fetchCrosswalkData = useCallback(async () => {
+  const fetchDetectionData = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/crosswalk');
+      const response = await fetch('http://localhost:5000/api/detection');
       const data = await response.json();
-      setCrosswalkDetected(data.detected);
-      setConfidence(data.confidence);
-      // If a crosswalk is detected and it hasn't been announced yet, announce it
-      if (data.detected && !lastAnnouncement) {
-        announceCrosswalk(crosswalkMessage);
-        setLastAnnouncement(true);
-        setShowMessage(true);
-        setTimeout(() => {
-          setShowMessage(false);
-          setLastAnnouncement(false); 
-        }, 5000);
-      } else if (!data.detected) {
-        setLastAnnouncement(false);
-        setShowMessage(false); // Hide message if no crosswalk detected
+
+      // Update state based on the received data
+      setCrosswalkDetected(data.crosswalk.detected);
+      setCrosswalkConfidence(data.crosswalk.confidence);
+      setPedestrianDetected(data.pedestrian_green.detected);
+      setPedestrianConfidence(data.pedestrian_green.confidence);
+
+      // Only proceed if both detections are present with confidence above 0.5
+      if (
+        data.crosswalk.detected &&
+        data.crosswalk.confidence > 0.5 &&
+        data.pedestrian_green.detected &&
+        data.pedestrian_green.confidence > 0.5
+      ) {
+        if (!announcementMade) {
+          const message = 'It is safe to cross.';
+          announceMessage(message);
+          setAnnouncementMade(true);
+        }
+      } else {
+        setAnnouncementMade(false);
       }
     } catch (error) {
-      console.error("Error fetching crosswalk data:", error);
+      console.error("Error fetching detection data:", error);
     }
-  }, [lastAnnouncement, crosswalkMessage]);
+  }, [announcementMade]);
 
-  // useEffect hook to fetch crosswalk data every second
   useEffect(() => {
-    const intervalId = setInterval(fetchCrosswalkData, 1000);
+    const intervalId = setInterval(fetchDetectionData, 1000);
     return () => clearInterval(intervalId);
-  }, [fetchCrosswalkData]);
+  }, [fetchDetectionData]);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 1 }} 
+      transition={{ duration: 1 }}
       className="App"
-    >  
-        <header className="App-header">
+    >
+      <header className="App-header">
         <img src={logo} className='App-logo' alt="Logo" />
         <h1>Safe Step</h1>
       </header>
@@ -103,10 +104,14 @@ function MainPage() {
         <video ref={videoRef} autoPlay playsInline />
       </div>
       <div className="output-section">
-        <h2>{crosswalkDetected ? 'Safe to cross!' : ''}</h2>
-        {crosswalkDetected && showMessage && ( // Only show confidence if crosswalk is detected and the message is displayed
-          <p>Confidence: {confidence.toFixed(2)}</p>
-        )}
+        {crosswalkDetected && crosswalkConfidence > 0.5 && pedestrianDetected && pedestrianConfidence > 0.5 ? (
+          <div>
+            <h2>It is safe to cross.</h2>
+            <p>
+              Crosswalk Confidence: {crosswalkConfidence.toFixed(2)} | Pedestrian Symbol Confidence: {pedestrianConfidence.toFixed(2)}
+            </p>
+          </div>
+        ) : null}
       </div>
     </motion.div>
   );
